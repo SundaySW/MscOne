@@ -7,7 +7,7 @@
 #include "MscOne.hpp"
 #include "tim.h"
 
-MscOne mscOne(DeviceUID::TYPE_MICROCHIP, 0x01, 0x10, &hfdcan1, &hadc1, &hi2c2, &hdac1, &htim3);
+MscOne mscOne(DeviceUID::TYPE_MICROCHIP, 0x01, 0x10, &hfdcan1);
 
 void SendMsg(char dest, char msgType, const char *data, char dlc)
 {
@@ -29,8 +29,9 @@ extern "C"
             Error_Handler();
         if (HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
             Error_Handler();
+        mscOne.initPerf(&hadc1, &hadc2, &hi2c2, &hdac1, &htim4);
         mscOne.Start();
-//        HAL_TIM_Base_Start_IT(&htim1);
+        HAL_TIM_Base_Start_IT(&htim1);
 //        HAL_TIM_PWM_Start_IT(&htim4, TIM_CHANNEL_1);
     }
     void While1_in_mainCpp()
@@ -74,14 +75,12 @@ extern "C"
 
     void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     {
-        if (hadc == &hadc1)
-            mscOne.getAdcA().OnCallback();
+        mscOne.processADCCallback(hadc);
     }
 
     void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
     {
-        if (htim == &htim3)
-            mscOne.getTimIC().OnCollBack();
+        mscOne.processTimCallBack(htim);
     }
 
     void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)

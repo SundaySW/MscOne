@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
+set(CMAKE_TOOLCHAIN_FILE cmake/toolchain.cmake)
+
 if(NOT CMAKE_BUILD_TYPE)
     message(STATUS "CMAKE_BUILD_TYPE not set, defaulting to DEBUG")
     set(CMAKE_BUILD_TYPE DEBUG)
@@ -12,7 +14,7 @@ message(STATUS "CMAKE_TOOLCHAIN_FILE: ${CMAKE_TOOLCHAIN_FILE}")
 project(MSC_ONE         C CXX ASM)
 set(DEVICE_FAMILY       STM32G4xx)
 set(DEVICE_NAME         STM32G431xx)
-set(DEVICE_FULL_NAME    STM32G431KBTx)
+set(DEVICE_FULL_NAME    STM32G431CBTX)
 
 include(cmake/utils.cmake)
 
@@ -24,7 +26,7 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/App/*.*
         )
 
-add_executable(${PROJECT_NAME} Core/Src/main.c startup_stm32g431xx.s)
+add_executable(${PROJECT_NAME} Core/Src/main.c Core/Startup/startup_stm32g431cbtx.s)
 
 target_include_directories(${PROJECT_NAME}
         PUBLIC
@@ -45,7 +47,7 @@ set_target_properties(${PROJECT_NAME}
         C_STANDARD 11
         C_EXTENSIONS ON
         CMAKE_C_STANDARD_REQUIRED ON
-        CXX_STANDARD 20
+        CXX_STANDARD 17
         CXX_EXTENSIONS ON
         CMAKE_CXX_STANDARD_REQUIRED ON
         )

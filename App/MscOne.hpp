@@ -29,64 +29,83 @@ using namespace Protos;
 #define PARAM_NOFCALIB_FIELDS       2
 #define EEPROM_PARAM_SIZE           sizeof(float)*PARAM_NOFCALIB_FIELDS
 
-
 class MscOne : public BaseDevice, public OneWire::TaskProvider
 {
 public:
-    typedef Adc<2> ADC;
-    MscOne(DeviceUID::TYPE uidType, uint8_t family, uint8_t addr,
-           FDCAN_HandleTypeDef* can, ADC_HandleTypeDef *adc1, I2C_HandleTypeDef *i2c2, DAC_HandleTypeDef *dac1, TIM_HandleTypeDef* timHall)
+    typedef Adc<3> ADCc3;
+    typedef Adc<2> ADCc2;
+
+    MscOne(DeviceUID::TYPE uidType, uint8_t family, uint8_t addr, FDCAN_HandleTypeDef* can)
         : BaseDevice(uidType, family, addr, can)
-        ,I2CMaster(I2C(i2c2))
         ,ds2482(I2CMaster, DS2482_I2C_ADDR, *this)
         ,eeprom(&I2CMaster, EEPROM_I2C_ADDR)
         ,OWDevices(OneWire::DevicePool(ds2482))
     {
-        AdcA = std::move(ADC(adc1));
+    }
+
+    void initPerf(ADC_HandleTypeDef *adc1, ADC_HandleTypeDef *adc2, I2C_HandleTypeDef *i2c2, DAC_HandleTypeDef *dac1, TIM_HandleTypeDef* timHall){
+        I2CMaster = I2C(i2c2);
+        AdcA1 = std::move(ADCc3(adc1));
+        AdcA2 = std::move(ADCc2(adc2));
         TimIC0 = std::move(Tim_ICMode(timHall, TIM_CHANNEL_1));
 
         Valve0Ctrl = std::move(DacParam(dac1, DAC_CHANNEL_1));
-        Valve0Ctrl.SetId(0xC8);
+        Valve0Ctrl.SetId(0xC1);
         Valve0Ctrl.SetCtrlRate(500);
         Valve0Ctrl.SetSendRate(0);
         Valve0Ctrl.SetShort(0);
 
         Valve1Ctrl = std::move(DacParam(dac1, DAC_CHANNEL_2));
-        Valve1Ctrl.SetId(0xC9);
+        Valve1Ctrl.SetId(0xC2);
         Valve1Ctrl.SetCtrlRate(500);
         Valve1Ctrl.SetSendRate(0);
         Valve1Ctrl.SetShort(0);
 
-        Preasure0.SetId(0x32);
-        Preasure0.SetUpdateRate(1000);
-        Preasure0.SetSendRate(2000);
-
-        Preasure1.SetId(0x33);
+        Preasure1.SetId(0x31);
         Preasure1.SetUpdateRate(1000);
         Preasure1.SetSendRate(2000);
 
-//        using ReturnType = std::invoke_result_t<decltype(makeValueFlowMeter)>;
-        hallSensor0.SetId(0x34);
+        Preasure2.SetId(0x32);
+        Preasure2.SetUpdateRate(1000);
+        Preasure2.SetSendRate(2000);
+
+        Preasure3.SetId(0x33);
+        Preasure3.SetUpdateRate(1000);
+        Preasure3.SetSendRate(2000);
+
+        Preasure4.SetId(0x34);
+        Preasure4.SetUpdateRate(1000);
+        Preasure4.SetSendRate(2000);
+
+        Preasure5.SetId(0x35);
+        Preasure5.SetUpdateRate(1000);
+        Preasure5.SetSendRate(2000);
+
+//      using ReturnType = std::invoke_result_t<decltype(makeValueFlowMeter)>;
+        hallSensor0.SetId(0x41);
         hallSensor0.SetUpdateRate(1000);
         hallSensor0.SetSendRate(2000);
     }
 
 	void Start()
 	{
-		uint8_t r_data[6] = {0};
-		eeprom.readUID(r_data);
-		memcpy(&Uid.Data.I4, r_data, sizeof(uint32_t));
+		readUID();
         loadCalibParamsDataFromEEPROM();
-
         ds2482.Start();
-		AdcA.Start();
+		AdcA1.Start();
+        AdcA2.Start();
 		TimIC0.Start();
-//		Valve0Ctrl.Start();
-//		Valve1Ctrl.Start();
+		Valve0Ctrl.Start();
+		Valve1Ctrl.Start();
 		Protos::Device::SendProtosMsg(Protos::BROADCAST, Protos::MSGTYPE_CMDMISC_ANSWER, "12345678", 8);
-//		HAL_GPIO_WritePin(W1_SLPZ_GPIO_Port, W1_SLPZ_Pin, GPIO_PIN_SET);
 		OWDevices.OnSearch(0x00, OneWire::DEVICE_FAMILY::FAMILY_UNKNOWN);
 	}
+
+    void readUID(){
+        uint8_t r_data[6] = {0};
+        eeprom.readUID(r_data);
+        memcpy(&Uid.Data.I4, r_data, sizeof(uint32_t));
+    }
 
 	bool ProcessTaskResult(const OneWire::Task::Result& task) override
 	{
@@ -135,15 +154,21 @@ public:
                 break;
         }
 	};
+
     I2C& getI2CMaster(){
         return I2CMaster;
     }
-    ADC& getAdcA(){
-        return AdcA;
+
+    void processADCCallback(ADC_HandleTypeDef* hadc){
+        if (hadc == AdcA1.getHandler())
+            AdcA1.OnCallback();
+        else if(hadc == AdcA2.getHandler())
+            AdcA2.OnCallback();
     }
 
-    Tim_ICMode& getTimIC(){
-        return TimIC0;
+    void processTimCallBack(TIM_HandleTypeDef* htim){
+        if(htim == TimIC0.getHTim())
+            TimIC0.OnCollBack();
     }
 
     static void saveCalibParamToEEPROM(char ID, float* data){
@@ -176,22 +201,29 @@ public:
 
 private:
     I2C I2CMaster;
-    inline static ADC AdcA;
+    inline static ADCc3 AdcA1;
+    inline static ADCc2 AdcA2;
     inline static Tim_ICMode TimIC0;
-    inline static AdcParam Preasure0 = AdcParam(&AdcA, 0, &saveCalibParamToEEPROM);
-    inline static AdcParam Preasure1 = AdcParam(&AdcA, 1, &saveCalibParamToEEPROM);
-    inline static Tim_ICmParam hallSensor0 = Tim_ICmParam(&TimIC0, &saveCalibParamToEEPROM);
+    inline static AdcParam Preasure1{AdcParam(&AdcA1, 0, &saveCalibParamToEEPROM)};
+    inline static AdcParam Preasure2{AdcParam(&AdcA1, 1, &saveCalibParamToEEPROM)};
+    inline static AdcParam Preasure3{AdcParam(&AdcA1, 2, &saveCalibParamToEEPROM)};
+    inline static AdcParam Preasure4{AdcParam(&AdcA2, 0, &saveCalibParamToEEPROM)};
+    inline static AdcParam Preasure5{AdcParam(&AdcA2, 1, &saveCalibParamToEEPROM)};
+    inline static Tim_ICmParam hallSensor0{Tim_ICmParam(&TimIC0, &saveCalibParamToEEPROM)};
     inline static DacParam Valve0Ctrl;
     inline static DacParam Valve1Ctrl;
-    inline static constexpr int PARAM_CNT = 5;
+    inline static constexpr int PARAM_CNT = 8;
     inline static constexpr auto Params{[]() constexpr{
         std::array<BaseParam*, PARAM_CNT> result{};
         int pCount = PARAM_CNT-1;
-        result[pCount--] =  (BaseParam*)&Valve0Ctrl;
-        result[pCount--] =  (BaseParam*)&Valve1Ctrl;
-        result[pCount--] =  (BaseParam*)&Preasure0;
-        result[pCount--] =  (BaseParam*)&Preasure1;
-        result[pCount] =    (BaseParam*)&hallSensor0;
+        result[pCount--] = (BaseParam*)&Valve0Ctrl;
+        result[pCount--] = (BaseParam*)&Valve1Ctrl;
+        result[pCount--] = (BaseParam*)&Preasure1;
+        result[pCount--] = (BaseParam*)&Preasure2;
+        result[pCount--] = (BaseParam*)&Preasure3;
+        result[pCount--] = (BaseParam*)&Preasure4;
+        result[pCount--] = (BaseParam*)&Preasure5;
+        result[pCount]   = (BaseParam*)&hallSensor0;
         return result;
     }()};
     Eeprom24AAUID eeprom;

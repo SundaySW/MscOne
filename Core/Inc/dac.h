@@ -34,14 +34,11 @@ extern "C" {
 
 extern DAC_HandleTypeDef hdac1;
 
-extern DAC_HandleTypeDef hdac3;
-
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
 
 void MX_DAC1_Init(void);
-void MX_DAC3_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
