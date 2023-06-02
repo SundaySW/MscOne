@@ -43,11 +43,18 @@ public:
     {
     }
 
-    void initPerf(ADC_HandleTypeDef *adc1, ADC_HandleTypeDef *adc2, I2C_HandleTypeDef *i2c2, DAC_HandleTypeDef *dac1, TIM_HandleTypeDef* timHall){
+    void initPerf(ADC_HandleTypeDef *adc1,
+                  ADC_HandleTypeDef *adc2,
+                  I2C_HandleTypeDef *i2c2,
+                  DAC_HandleTypeDef *dac1,
+                  TIM_HandleTypeDef* timHall0,
+                  TIM_HandleTypeDef* timHall1)
+    {
         I2CMaster = I2C(i2c2);
         AdcA1 = std::move(ADCc3(adc1));
         AdcA2 = std::move(ADCc2(adc2));
-        TimIC0 = std::move(Tim_ICMode(timHall, TIM_CHANNEL_1));
+        TimIC0 = std::move(Tim_ICMode(timHall0, TIM_CHANNEL_1));
+        TimIC1 = std::move(Tim_ICMode(timHall1, TIM_CHANNEL_1));
 
         Valve0Ctrl = std::move(DacParam(dac1, DAC_CHANNEL_1));
         Valve0Ctrl.SetId(0xC1);
@@ -85,6 +92,10 @@ public:
         hallSensor0.SetId(0x41);
         hallSensor0.SetUpdateRate(1000);
         hallSensor0.SetSendRate(2000);
+
+        hallSensor1.SetId(0x42);
+        hallSensor1.SetUpdateRate(1000);
+        hallSensor1.SetSendRate(2000);
     }
 
 	void Start()
@@ -95,6 +106,7 @@ public:
 		AdcA1.Start();
         AdcA2.Start();
 		TimIC0.Start();
+        TimIC1.Start();
 		Valve0Ctrl.Start();
 		Valve1Ctrl.Start();
 		Protos::Device::SendProtosMsg(Protos::BROADCAST, Protos::MSGTYPE_CMDMISC_ANSWER, "12345678", 8);
@@ -204,15 +216,17 @@ private:
     inline static ADCc3 AdcA1;
     inline static ADCc2 AdcA2;
     inline static Tim_ICMode TimIC0;
+    inline static Tim_ICMode TimIC1;
     inline static AdcParam Preasure1{AdcParam(&AdcA1, 0, &saveCalibParamToEEPROM)};
     inline static AdcParam Preasure2{AdcParam(&AdcA1, 1, &saveCalibParamToEEPROM)};
     inline static AdcParam Preasure3{AdcParam(&AdcA1, 2, &saveCalibParamToEEPROM)};
     inline static AdcParam Preasure4{AdcParam(&AdcA2, 0, &saveCalibParamToEEPROM)};
     inline static AdcParam Preasure5{AdcParam(&AdcA2, 1, &saveCalibParamToEEPROM)};
     inline static Tim_ICmParam hallSensor0{Tim_ICmParam(&TimIC0, &saveCalibParamToEEPROM)};
+    inline static Tim_ICmParam hallSensor1{Tim_ICmParam(&TimIC1, &saveCalibParamToEEPROM)};
     inline static DacParam Valve0Ctrl;
     inline static DacParam Valve1Ctrl;
-    inline static constexpr int PARAM_CNT = 8;
+    inline static constexpr int PARAM_CNT = 9;
     inline static constexpr auto Params{[]() constexpr{
         std::array<BaseParam*, PARAM_CNT> result{};
         int pCount = PARAM_CNT-1;
@@ -223,7 +237,8 @@ private:
         result[pCount--] = (BaseParam*)&Preasure3;
         result[pCount--] = (BaseParam*)&Preasure4;
         result[pCount--] = (BaseParam*)&Preasure5;
-        result[pCount]   = (BaseParam*)&hallSensor0;
+        result[pCount--] = (BaseParam*)&hallSensor0;
+        result[pCount]   = (BaseParam*)&hallSensor1;
         return result;
     }()};
     Eeprom24AAUID eeprom;

@@ -75,8 +75,6 @@ void Error_Handler(void);
 #define GPIO_CTRL_3_GPIO_Port GPIOB
 #define GPIO_CTRL_2_Pin GPIO_PIN_2
 #define GPIO_CTRL_2_GPIO_Port GPIOB
-#define GPIO_CTRL_0_PWM_Pin GPIO_PIN_10
-#define GPIO_CTRL_0_PWM_GPIO_Port GPIOB
 #define GPIO_FB0_Pin GPIO_PIN_11
 #define GPIO_FB0_GPIO_Port GPIOB
 #define GPIO_FB1_Pin GPIO_PIN_12
