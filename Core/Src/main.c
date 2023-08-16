@@ -54,8 +54,8 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-extern void While1_in_mainCpp();
-extern void cppInit();
+extern void device_main_loop();
+extern void initDevice();
 
 /* USER CODE END PFP */
 
@@ -105,7 +105,7 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
-    cppInit();
+    initDevice();
 
   /* USER CODE END 2 */
 
@@ -113,7 +113,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-      While1_in_mainCpp();
+    device_main_loop();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

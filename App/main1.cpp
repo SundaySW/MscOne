@@ -7,80 +7,66 @@
 #include "MscOne.hpp"
 #include "tim.h"
 
-MscOne mscOne(DeviceUID::TYPE_MICROCHIP, 0x01, 0x10, &hfdcan1);
-
-void SendMsg(char dest, char msgType, const char *data, char dlc)
-{
-    mscOne.SendProtosMsg(dest, msgType, data, dlc);
-}
-void SendMsg(char dest, char msgType, char data0, char data1)
-{
-    char buf[8];
-    buf[0] = data0;
-    buf[1] = data1;
-    mscOne.SendProtosMsg(dest, msgType, buf, 2);
-}
-
 extern "C"
 {
-    void cppInit()
+    void initDevice()
     {
         if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK)
             Error_Handler();
         if (HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
             Error_Handler();
-        mscOne.initPerf(&hadc1, &hadc2, &hi2c2, &hdac1, &htim2, &htim4);
-        mscOne.Start();
+        MscOne::getInstance().initPerf(&hadc1, &hadc2, &hi2c2, &hdac1, &htim2, &htim4);
+        MscOne::getInstance().Start();
         HAL_TIM_Base_Start_IT(&htim1);
 //        HAL_TIM_PWM_Start_IT(&htim4, TIM_CHANNEL_1);
     }
-    void While1_in_mainCpp()
+    void device_main_loop()
     {
-        mscOne.Poll();
+        MscOne::getInstance().Poll();
     }
 
     void OnSysTickTimer()
     {
-        mscOne.OnTimerINT(1);
+        MscOne::getInstance().OnTimerINT(1);
     }
 
     void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
     {
         if (hi2c == &hi2c2)
-            mscOne.getI2CMaster().WriteHandler();
+            MscOne::getInstance().getI2CMaster().WriteHandler();
     }
     void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
     {
         if (hi2c == &hi2c2)
-            mscOne.getI2CMaster().ReadHandler();
+            MscOne::getInstance().getI2CMaster().ReadHandler();
     }
 
     void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
     {
         if (hi2c == & hi2c2)
-            mscOne.getI2CMaster().ErrorHandler();
+            MscOne::getInstance().getI2CMaster().ErrorHandler();
     }
 
     void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
     {
         if (hi2c == &hi2c2)
-            mscOne.getI2CMaster().ReadHandler();
+            MscOne::getInstance().getI2CMaster().ReadHandler();
     }
 
     void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
     {
         if (hi2c == &hi2c2)
-            mscOne.getI2CMaster().WriteHandler();
+            MscOne::getInstance().getI2CMaster().WriteHandler();
     }
 
     void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     {
-        mscOne.processADCCallback(hadc);
+        MscOne::getInstance().processADCCallback(hadc);
     }
 
     void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
     {
-        mscOne.processTimCallBack(htim);
+        MscOne::getInstance().processTimCallBack(htim);
     }
 
     void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -99,7 +85,7 @@ extern "C"
             /* Retrieve Rx messages from RX FIFO0 */
             if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK)
                 Error_Handler();
-            mscOne.Port.OnRX(RxHeader, RxData);
+            MscOne::getInstance().Port.OnRX(RxHeader, RxData);
         }
     }
 }

@@ -1,5 +1,5 @@
-#ifndef SRC_TNH_HPP_
-#define SRC_TNH_HPP_
+#ifndef SRC_MSCONE_HPP_
+#define SRC_MSCONE_HPP_
 
 #include "stm32g4xx_hal.h"
 #include <cstring>
@@ -23,26 +23,26 @@
 
 #define EEPROM_I2C_ADDR 0x50
 #define DS2482_I2C_ADDR 0x18
-
-using namespace Protos;
 #define EEPROM_PARAMS_START_ADDR    OneWire::ParamTable::MAX_ROWS_COUNT * OneWire::ParamTable::ROW_SIZE
 #define PARAM_NOFCALIB_FIELDS       2
-#define EEPROM_PARAM_SIZE           sizeof(float)*PARAM_NOFCALIB_FIELDS
+#define EEPROM_PARAM_SIZE           (sizeof(float)*PARAM_NOFCALIB_FIELDS)
+
+using namespace Protos;
 
 class MscOne : public BaseDevice, public OneWire::TaskProvider
 {
 public:
-    typedef Adc<3> ADCc3;
-    typedef Adc<2> ADCc2;
+    using ADCc3 = Adc<3>;
+    using ADCc2 = Adc<2>;
+    MscOne() = delete;
+    MscOne(MscOne&) = delete;
+    MscOne(MscOne&&) = delete;
 
-    MscOne(DeviceUID::TYPE uidType, uint8_t family, uint8_t addr, FDCAN_HandleTypeDef* can)
-        : BaseDevice(uidType, family, addr, can)
-        ,ds2482(I2CMaster, DS2482_I2C_ADDR, *this)
-        ,eeprom(&I2CMaster, EEPROM_I2C_ADDR)
-        ,OWDevices(OneWire::DevicePool(ds2482))
-    {
+
+    static MscOne& getInstance(){
+        static auto self = MscOne(DeviceUID::TYPE_MICROCHIP, 0x01, 0x20, &hfdcan1);
+        return self;
     }
-
     void initPerf(ADC_HandleTypeDef *adc1,
                   ADC_HandleTypeDef *adc2,
                   I2C_HandleTypeDef *i2c2,
@@ -109,9 +109,37 @@ public:
         TimIC1.Start();
 		Valve0Ctrl.Start();
 		Valve1Ctrl.Start();
-		Protos::Device::SendProtosMsg(Protos::BROADCAST, Protos::MSGTYPE_CMDMISC_ANSWER, "12345678", 8);
+//		Protos::Device::SendProtosMsg(Protos::BROADCAST, Protos::MSGTYPE_CMDMISC_ANSWER, "12345678", 8);
 		OWDevices.OnSearch(0x00, OneWire::DEVICE_FAMILY::FAMILY_UNKNOWN);
 	}
+
+    static void saveCalibParamToEEPROM(char ID, float* data){
+        for(int i = 0; i < Params.size(); i++){
+            if(Params[i] == nullptr) continue;
+            if(Params[i]->GetId() == ID){
+                char buffer[EEPROM_PARAM_SIZE];
+                int Offset = EEPROM_PARAMS_START_ADDR + EEPROM_PARAM_SIZE*i;
+                memcpy(buffer, data, EEPROM_PARAM_SIZE);
+                eeprom_write_block(Offset, buffer, EEPROM_PARAM_SIZE);
+            }
+        }
+    }
+
+    static void loadCalibParamsDataFromEEPROM(){
+        for(int i = 0; i < Params.size(); i++){
+            if(Params[i] == nullptr) continue;
+            CalibrParam* calibPtr = nullptr;
+            Params[i]->QueryInterface(IID_CALIBRATEABLE, (void*&)calibPtr);
+            if(calibPtr == nullptr) continue;
+            char buffer[EEPROM_PARAM_SIZE];
+            int Offset = EEPROM_PARAMS_START_ADDR + EEPROM_PARAM_SIZE * i;
+            eeprom_read_block(Offset, buffer, EEPROM_PARAM_SIZE);
+            float calibData[PARAM_NOFCALIB_FIELDS];
+            memcpy(calibData, buffer, EEPROM_PARAM_SIZE);
+            calibPtr->SetOffset(calibData[0]);
+            calibPtr->SetMult(calibData[1]);
+        }
+    }
 
     void readUID(){
         uint8_t r_data[6] = {0};
@@ -119,25 +147,7 @@ public:
         memcpy(&Uid.Data.I4, r_data, sizeof(uint32_t));
     }
 
-	bool ProcessTaskResult(const OneWire::Task::Result& task) override
-	{
-		return OWDevices.ProcessTaskResult(task);
-	}
-
-	void OnPoll() override {
-        OWDevices.Poll();
-        for (auto* param : Params)
-            if(param != nullptr) param->Poll();
-	};
-
-	void OnTimer(short ms) override{
-        for (auto param : Params)
-            if(param != nullptr) param->OnTimer(ms);
-        OWDevices.OnTimer(ms);
-        ds2482.OnDelayTimer();
-	};
-
-	void ProcessMessage(const Protos::Msg& msg) override{
+    void ProcessMessage(const Protos::Msg& msg) override{
         Protos::Msg2 msg2;
         msg2.Pri = msg.Id.Tab[0];
         msg2.Src = msg.GetSenderID();
@@ -165,53 +175,50 @@ public:
             default:
                 break;
         }
+    };
+
+	bool ProcessTaskResult(const OneWire::Task::Result& task) override
+	{
+		return OWDevices.ProcessTaskResult(task);
+	}
+
+	void OnPoll() override {
+        OWDevices.Poll();
+        for (auto* param : Params)
+            if(param != nullptr) param->Poll();
+	};
+
+	void OnTimer(short ms) override{
+        for (auto param : Params)
+            if(param != nullptr) param->OnTimer(ms);
+        OWDevices.OnTimer(ms);
+        ds2482.OnDelayTimer();
 	};
 
     I2C& getI2CMaster(){
         return I2CMaster;
     }
 
-    void processADCCallback(ADC_HandleTypeDef* hadc){
+    static void processADCCallback(ADC_HandleTypeDef* hadc){
         if (hadc == AdcA1.getHandler())
             AdcA1.OnCallback();
         else if(hadc == AdcA2.getHandler())
             AdcA2.OnCallback();
     }
 
-    void processTimCallBack(TIM_HandleTypeDef* htim){
+    static void processTimCallBack(TIM_HandleTypeDef* htim){
         if(htim == TimIC0.getHTim())
             TimIC0.OnCollBack();
     }
 
-    static void saveCalibParamToEEPROM(char ID, float* data){
-        for(int i = 0; i < Params.size(); i++){
-            if(Params[i] == nullptr) continue;
-            if(Params[i]->GetId() == ID){
-                char buffer[EEPROM_PARAM_SIZE];
-                int Offset = EEPROM_PARAMS_START_ADDR + EEPROM_PARAM_SIZE*i;
-                memcpy(buffer, data, EEPROM_PARAM_SIZE);
-                eeprom_write_block(Offset, buffer, EEPROM_PARAM_SIZE);
-            }
-        }
-    }
-
-    void loadCalibParamsDataFromEEPROM(){
-        for(int i = 0; i < Params.size(); i++){
-            if(Params[i] == nullptr) continue;
-            CalibrParam* calibPtr = nullptr;
-            Params[i]->QueryInterface(IID_CALIBRATEABLE, (void*&)calibPtr);
-            if(calibPtr == nullptr) continue;
-            char buffer[EEPROM_PARAM_SIZE];
-            int Offset = EEPROM_PARAMS_START_ADDR + EEPROM_PARAM_SIZE * i;
-            eeprom_read_block(Offset, buffer, EEPROM_PARAM_SIZE);
-            float calibData[PARAM_NOFCALIB_FIELDS];
-            memcpy(calibData, buffer, EEPROM_PARAM_SIZE);
-            calibPtr->SetOffset(calibData[0]);
-            calibPtr->SetMult(calibData[1]);
-        }
-    }
-
 private:
+    MscOne(DeviceUID::TYPE uidType, uint8_t family, uint8_t addr, FDCAN_HandleTypeDef* can)
+            : BaseDevice(uidType, family, addr, can)
+            ,ds2482(I2CMaster, DS2482_I2C_ADDR, *this)
+            ,eeprom(&I2CMaster, EEPROM_I2C_ADDR)
+            ,OWDevices(OneWire::DevicePool(ds2482))
+    {}
+
     I2C I2CMaster;
     inline static ADCc3 AdcA1;
     inline static ADCc2 AdcA2;
@@ -245,4 +252,17 @@ private:
     OneWire::DS2482 ds2482;
     OneWire::DevicePool OWDevices;
 };
-#endif /* SRC_TNH_HPP_ */
+
+void SendMsg(char dest, char msgType, const char *data, char dlc)
+{
+    MscOne::getInstance().SendProtosMsg(dest, msgType, data, dlc);
+}
+void SendMsg(char dest, char msgType, char data0, char data1)
+{
+    char buf[8];
+    buf[0] = data0;
+    buf[1] = data1;
+    MscOne::getInstance().SendProtosMsg(dest, msgType, buf, 2);
+}
+
+#endif /* SRC_MSCONE_HPP_ */
