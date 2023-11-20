@@ -4,3 +4,4 @@
 .project
 /cmake-build-debug/
 /cmake-build-release/
+/Makefile

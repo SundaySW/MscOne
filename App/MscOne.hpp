@@ -1,5 +1,4 @@
-#ifndef SRC_MSCONE_HPP_
-#define SRC_MSCONE_HPP_
+#pragma once
 
 #include "stm32g4xx_hal.h"
 #include <cstring>
@@ -23,9 +22,6 @@
 
 #define EEPROM_I2C_ADDR 0x50
 #define DS2482_I2C_ADDR 0x18
-#define EEPROM_PARAMS_START_ADDR    OneWire::ParamTable::MAX_ROWS_COUNT * OneWire::ParamTable::ROW_SIZE
-#define PARAM_NOFCALIB_FIELDS       2
-#define EEPROM_PARAM_SIZE           (sizeof(float)*PARAM_NOFCALIB_FIELDS)
 
 using namespace Protos;
 
@@ -37,10 +33,10 @@ public:
     MscOne() = delete;
     MscOne(MscOne&) = delete;
     MscOne(MscOne&&) = delete;
-
+    MscOne& operator = (MscOne const &) = delete;
 
     static MscOne& getInstance(){
-        static auto self = MscOne(DeviceUID::TYPE_MICROCHIP, 0x01, 0x20, &hfdcan1);
+        static auto self = MscOne(DeviceUID::TYPE_MICROCHIP, 0x01, 0x33, &hfdcan1);
         return self;
     }
     void initPerf(ADC_HandleTypeDef *adc1,
@@ -109,16 +105,16 @@ public:
         TimIC1.Start();
 		Valve0Ctrl.Start();
 		Valve1Ctrl.Start();
-//		Protos::Device::SendProtosMsg(Protos::BROADCAST, Protos::MSGTYPE_CMDMISC_ANSWER, "12345678", 8);
-		OWDevices.OnSearch(0x00, OneWire::DEVICE_FAMILY::FAMILY_UNKNOWN);
-	}
+        OWDevices.OnSearch(0, OneWire::DEVICE_FAMILY::FAMILY_UNKNOWN);
+        OWDevices.OnSearch(Address, OneWire::DEVICE_FAMILY::FAMILY_UNKNOWN);
+    }
 
     static void saveCalibParamToEEPROM(char ID, float* data){
         for(int i = 0; i < Params.size(); i++){
             if(Params[i] == nullptr) continue;
             if(Params[i]->GetId() == ID){
                 char buffer[EEPROM_PARAM_SIZE];
-                int Offset = EEPROM_PARAMS_START_ADDR + EEPROM_PARAM_SIZE*i;
+                int Offset = EEPROM_PARAMS_START_ADDR + EEPROM_PARAM_SIZE * i;
                 memcpy(buffer, data, EEPROM_PARAM_SIZE);
                 eeprom_write_block(Offset, buffer, EEPROM_PARAM_SIZE);
             }
@@ -159,19 +155,15 @@ public:
         if (msg2.Dst == Address)
             OWDevices.ProcessMessage(msg2);
 
-        auto msgID = msg.GetFieldID();
         switch (msg.GetMSGType()) {
-            case MSGTYPE_CMDSPEC:
-                break;
-            case MSGTYPE_CMDSPEC_ANSWER:
-                break;
             case MSGTYPE_PARAM_SET:
             case MSGTYPE_PARAM_REQUEST:
                 for (auto param : Params)
                     if(param != nullptr) param->ProcessMessage(msg);
                 break;
             case MSGTYPE_PARAM_ANSWER:
-                break;
+            case MSGTYPE_CMDSPEC:
+            case MSGTYPE_CMDSPEC_ANSWER:
             default:
                 break;
         }
@@ -224,13 +216,13 @@ private:
     inline static ADCc2 AdcA2;
     inline static Tim_ICMode TimIC0;
     inline static Tim_ICMode TimIC1;
-    inline static AdcParam Preasure1{AdcParam(&AdcA1, 0, &saveCalibParamToEEPROM)};
-    inline static AdcParam Preasure2{AdcParam(&AdcA1, 1, &saveCalibParamToEEPROM)};
-    inline static AdcParam Preasure3{AdcParam(&AdcA1, 2, &saveCalibParamToEEPROM)};
-    inline static AdcParam Preasure4{AdcParam(&AdcA2, 0, &saveCalibParamToEEPROM)};
-    inline static AdcParam Preasure5{AdcParam(&AdcA2, 1, &saveCalibParamToEEPROM)};
-    inline static Tim_ICmParam hallSensor0{Tim_ICmParam(&TimIC0, &saveCalibParamToEEPROM)};
-    inline static Tim_ICmParam hallSensor1{Tim_ICmParam(&TimIC1, &saveCalibParamToEEPROM)};
+    inline static AdcParam Preasure1{&AdcA1, 0, &saveCalibParamToEEPROM};
+    inline static AdcParam Preasure2{&AdcA1, 1, &saveCalibParamToEEPROM};
+    inline static AdcParam Preasure3{&AdcA1, 2, &saveCalibParamToEEPROM};
+    inline static AdcParam Preasure4{&AdcA2, 0, &saveCalibParamToEEPROM};
+    inline static AdcParam Preasure5{&AdcA2, 1, &saveCalibParamToEEPROM};
+    inline static Tim_ICmParam hallSensor0{&TimIC0, &saveCalibParamToEEPROM};
+    inline static Tim_ICmParam hallSensor1{&TimIC1, &saveCalibParamToEEPROM};
     inline static DacParam Valve0Ctrl;
     inline static DacParam Valve1Ctrl;
     inline static constexpr int PARAM_CNT = 9;
@@ -264,5 +256,3 @@ void SendMsg(char dest, char msgType, char data0, char data1)
     buf[1] = data1;
     MscOne::getInstance().SendProtosMsg(dest, msgType, buf, 2);
 }
-
-#endif /* SRC_MSCONE_HPP_ */
